@@ -1,0 +1,6 @@
+apiVersion: v2
+name: storage-service
+description: TritonTube storage layer featuring consistent hashing and replication
+version: 0.1.0
+appVersion: "0.1.0"
+type: application
