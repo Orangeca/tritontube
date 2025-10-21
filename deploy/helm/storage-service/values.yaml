@@ -1,0 +1,44 @@
+replicaCount: 3
+
+image:
+  repository: ghcr.io/example/tritontube-storage
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+persistence:
+  enabled: true
+  storageClass: gp3
+  size: 500Gi
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+env:
+  STORAGE_DATA_PATH: /var/lib/tritontube
+  STORAGE_LISTEN_ADDR: 0.0.0.0:8080
+  STORAGE_S3_BUCKET: ""
+  STORAGE_S3_PREFIX: ""
+  STORAGE_METADATA_ENDPOINT: http://metadata-service:8080
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+s3:
+  irsaRoleArn: ""
