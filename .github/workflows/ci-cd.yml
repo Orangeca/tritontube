@@ -1,0 +1,106 @@
+name: Build and Deploy TritonTube
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  K8S_NAMESPACE: tritontube
+  WEB_ECR_REPOSITORY: ${{ secrets.WEB_ECR_REPOSITORY }}
+  METADATA_ECR_REPOSITORY: ${{ secrets.METADATA_ECR_REPOSITORY }}
+  STORAGE_ECR_REPOSITORY: ${{ secrets.STORAGE_ECR_REPOSITORY }}
+  STORAGE_IAM_ROLE_ARN: ${{ secrets.STORAGE_IAM_ROLE_ARN }}
+  HELM_RELEASE_NAME: tritontube
+
+jobs:
+  build-and-deploy:
+    name: Build images and deploy to EKS
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate configuration
+        run: |
+          required_env=(AWS_REGION EKS_CLUSTER_NAME WEB_ECR_REPOSITORY METADATA_ECR_REPOSITORY STORAGE_ECR_REPOSITORY STORAGE_IAM_ROLE_ARN)
+          for var in "${required_env[@]}"; do
+            if [ -z "${!var}" ]; then
+              echo "Environment variable $var must be provided via repository secrets." >&2
+              exit 1
+            fi
+          done
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker build metadata
+        id: build-info
+        run: |
+          echo "image_tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Web image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/${{ env.WEB_ECR_REPOSITORY }}:${{ steps.build-info.outputs.image_tag }}"
+          docker build -f cmd/web/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Build and push Metadata image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/${{ env.METADATA_ECR_REPOSITORY }}:${{ steps.build-info.outputs.image_tag }}"
+          docker build -f cmd/metadata/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Build and push Storage image
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/${{ env.STORAGE_ECR_REPOSITORY }}:${{ steps.build-info.outputs.image_tag }}"
+          docker build -f cmd/storage/Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.4"
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name "$EKS_CLUSTER_NAME" \
+            --region "$AWS_REGION"
+
+      - name: Deploy to EKS using Helm
+        run: |
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE_TAG="${{ steps.build-info.outputs.image_tag }}"
+          helm upgrade --install "$HELM_RELEASE_NAME" deploy/helm/tritontube \
+            --namespace "$K8S_NAMESPACE" \
+            --create-namespace \
+            --set images.web.repository="$REGISTRY/${{ env.WEB_ECR_REPOSITORY }}" \
+            --set images.web.tag="$IMAGE_TAG" \
+            --set images.metadata.repository="$REGISTRY/${{ env.METADATA_ECR_REPOSITORY }}" \
+            --set images.metadata.tag="$IMAGE_TAG" \
+            --set images.storage.repository="$REGISTRY/${{ env.STORAGE_ECR_REPOSITORY }}" \
+            --set images.storage.tag="$IMAGE_TAG" \
+            --set serviceAccount.storage.roleArn="$STORAGE_IAM_ROLE_ARN" \
+            --wait
