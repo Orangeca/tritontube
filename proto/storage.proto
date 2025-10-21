@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package storage.v1;
+
+option go_package = "tritontube/internal/storage/proto;storagepb";
+
+message SegmentLocator {
+  string bucket = 1;
+  string object = 2;
+}
+
+message UploadSegmentHeader {
+  string segment_id = 1;
+  SegmentLocator locator = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  string checksum = 5;
+  map<string, string> attributes = 6;
+  string s3_bucket = 7;
+  string s3_key = 8;
+}
+
+message ReplicaAck {
+  string node_id = 1;
+  bool success = 2;
+  string error_message = 3;
+}
+
+message UploadSegmentRequest {
+  oneof payload {
+    UploadSegmentHeader header = 1;
+    bytes chunk = 2;
+    bool commit = 3;
+  }
+}
+
+message UploadSegmentResponse {
+  int64 size_committed = 1;
+  string checksum = 2;
+  repeated ReplicaAck replica_status = 3;
+}
+
+message GetSegmentRequest {
+  SegmentLocator locator = 1;
+  int64 offset = 2;
+  int64 length = 3;
+}
+
+message GetSegmentResponse {
+  bytes chunk = 1;
+  bool eof = 2;
+}
+
+message VirtualNode {
+  string id = 1;
+  uint64 token = 2;
+  string owner_node_id = 3;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  string advertise_address = 2;
+  int64 capacity_bytes = 3;
+  int64 available_bytes = 4;
+  repeated VirtualNode virtual_nodes = 5;
+  int64 segments_serving = 6;
+}
+
+message HeartbeatResponse {
+  int64 lease_ttl_seconds = 1;
+  bool require_rebalance = 2;
+  int64 ring_version = 3;
+}
+
+message RebalanceRequest {
+  string node_id = 1;
+  repeated VirtualNode virtual_nodes = 2;
+  bool drain = 3;
+}
+
+message RebalancePlan {
+  string plan_id = 1;
+  int64 ring_version = 2;
+  repeated VirtualNode assignments = 3;
+}
+
+message RebalanceResponse {
+  RebalancePlan plan = 1;
+}
+
+service StorageService {
+  rpc UploadSegment(stream UploadSegmentRequest) returns (UploadSegmentResponse);
+  rpc GetSegment(GetSegmentRequest) returns (stream GetSegmentResponse);
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  rpc Rebalance(RebalanceRequest) returns (RebalanceResponse);
+}
