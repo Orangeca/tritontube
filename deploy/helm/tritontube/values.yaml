@@ -1,0 +1,56 @@
+namespace: tritontube
+
+images:
+  web:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  metadata:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  storage:
+    repository: ""
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+replicaCounts:
+  web: 2
+  metadata: 2
+  storage: 2
+
+serviceAccount:
+  storage:
+    create: true
+    name: storage-service
+    annotations: {}
+    roleArn: ""
+
+service:
+  web:
+    port: 80
+    targetPort: 8080
+  metadata:
+    port: 8082
+    targetPort: 8082
+  storage:
+    port: 8081
+    targetPort: 8081
+
+resources:
+  web: {}
+  metadata: {}
+  storage: {}
+
+env:
+  web:
+    METADATA_BASE: "http://metadata:8082"
+  metadata:
+    STORAGE_NODES: "http://storage:8081"
+  storage: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

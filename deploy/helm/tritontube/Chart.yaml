@@ -1,0 +1,6 @@
+apiVersion: v2
+name: tritontube
+version: 0.1.0
+appVersion: "0.1.0"
+description: Helm chart that deploys the TritonTube web, metadata, and storage services.
+type: application

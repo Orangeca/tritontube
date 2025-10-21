@@ -1,0 +1,87 @@
+{{- range $name, $image := .Values.images }}
+{{- $componentName := include "tritontube.componentName" (dict "root" $ "component" $name) }}
+{{- $repository := required (printf "Value images.%s.repository must be set" $name) $image.repository }}
+{{- $tag := default $.Chart.AppVersion $image.tag }}
+{{- $replicas := default 1 (index $.Values.replicaCounts $name) }}
+{{- $serviceConfig := index $.Values.service $name }}
+{{- $envVars := dict }}
+{{- with index $.Values.env $name }}
+{{- range $key, $value := . }}
+{{- $_ := set $envVars $key $value }}
+{{- end }}
+{{- end }}
+{{- if eq $name "web" }}
+{{- if not (hasKey $envVars "METADATA_BASE") }}
+{{- $metadataService := include "tritontube.componentName" (dict "root" $ "component" "metadata") }}
+{{- $_ := set $envVars "METADATA_BASE" (printf "http://%s:%d" $metadataService (index $.Values.service "metadata").port) }}
+{{- end }}
+{{- end }}
+{{- if eq $name "metadata" }}
+{{- if not (hasKey $envVars "STORAGE_NODES") }}
+{{- $storageService := include "tritontube.componentName" (dict "root" $ "component" "storage") }}
+{{- $_ := set $envVars "STORAGE_NODES" (printf "http://%s:%d" $storageService (index $.Values.service "storage").port) }}
+{{- end }}
+{{- end }}
+{{- if eq $name "storage" }}
+{{- if not (hasKey $envVars "PORT") }}
+{{- $_ := set $envVars "PORT" (printf "%d" $serviceConfig.targetPort) }}
+{{- end }}
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $componentName }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+{{ include "tritontube.labels" $ | indent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: {{ $replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "tritontube.name" $ }}
+      app.kubernetes.io/component: {{ $name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "tritontube.name" $ }}
+        app.kubernetes.io/component: {{ $name }}
+        app.kubernetes.io/instance: {{ $.Release.Name }}
+    spec:
+{{- if eq $name "storage" }}
+      serviceAccountName: {{ $.Values.serviceAccount.storage.name }}
+{{- end }}
+      containers:
+        - name: {{ $name }}
+          image: {{ printf "%s:%s" $repository $tag }}
+          imagePullPolicy: {{ default "IfNotPresent" $image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $serviceConfig.targetPort }}
+              protocol: TCP
+{{- if gt (len $envVars) 0 }}
+          env:
+{{- range $key, $value := $envVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+{{- end }}
+{{- end }}
+{{- with index $.Values.resources $name }}
+          resources:
+{{ toYaml . | indent 12 }}
+{{- end }}
+{{- with $.Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with $.Values.tolerations }}
+      tolerations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- with $.Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- end }}
