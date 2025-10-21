@@ -1,0 +1,45 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/example/tritontube-metadata
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8082
+
+env:
+  postgresDSN: postgres://metadata:metadata@metadata-postgres:5432/metadata?sslmode=disable
+  etcdEndpoint: http://metadata-etcd:2379
+  pgxMaxConns: 32
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+podAnnotations: {}
+
+nodeSelector: {}
+
+livenessProbe:
+  path: /healthz
+  port: 8082
+
+readinessProbe:
+  path: /healthz
+  port: 8082

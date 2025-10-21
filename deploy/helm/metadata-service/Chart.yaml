@@ -1,0 +1,5 @@
+apiVersion: v2
+name: metadata-service
+description: TritonTube metadata gRPC service
+version: 0.1.0
+appVersion: "0.1.0"

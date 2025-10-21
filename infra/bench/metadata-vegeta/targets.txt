@@ -1,0 +1,11 @@
+POST http://localhost:8082/videos
+Content-Type: application/json
+
+{"id":"bench-video"}
+
+POST http://localhost:8082/videos/bench-video/segments?rend=720p&idx=1
+Content-Type: application/json
+
+{}
+
+GET http://localhost:8082/videos/bench-video/segments/loc?rend=720p&idx=1
