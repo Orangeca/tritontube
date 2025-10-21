@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package metadata.v1;
+
+option go_package = "tritontube/internal/metadata/proto;metadata";
+
+message MetadataItem {
+  string key = 1;
+  string value = 2;
+  map<string, string> attributes = 3;
+  int64 version = 4;
+}
+
+message PutMetadataRequest {
+  MetadataItem item = 1;
+  int64 expected_version = 2;
+  int64 expected_etcd_revision = 3;
+}
+
+message PutMetadataResponse {
+  MetadataItem item = 1;
+  int64 etcd_revision = 2;
+}
+
+message GetMetadataRequest {
+  string key = 1;
+}
+
+message GetMetadataResponse {
+  MetadataItem item = 1;
+}
+
+message DeleteMetadataRequest {
+  string key = 1;
+  int64 expected_version = 2;
+  int64 expected_etcd_revision = 3;
+}
+
+message DeleteMetadataResponse {
+  int64 etcd_revision = 1;
+}
+
+message ListMetadataRequest {
+  string prefix = 1;
+  int32 limit = 2;
+  string page_token = 3;
+}
+
+message ListMetadataResponse {
+  repeated MetadataItem items = 1;
+  string next_page_token = 2;
+}
+
+service MetadataService {
+  rpc PutMetadata(PutMetadataRequest) returns (PutMetadataResponse);
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
+  rpc DeleteMetadata(DeleteMetadataRequest) returns (DeleteMetadataResponse);
+  rpc ListMetadata(ListMetadataRequest) returns (ListMetadataResponse);
+}
