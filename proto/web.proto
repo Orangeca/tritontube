@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package web.v1;
+
+import "google/api/annotations.proto";
+
+option go_package = "tritontube/internal/webapi/proto;webapipb";
+
+// VideoStatus models the lifecycle of a video asset.
+enum VideoStatus {
+  VIDEO_STATUS_UNSPECIFIED = 0;
+  VIDEO_STATUS_UPLOADING = 1;
+  VIDEO_STATUS_PENDING_TRANSCODE = 2;
+  VIDEO_STATUS_TRANSCODING = 3;
+  VIDEO_STATUS_READY = 4;
+  VIDEO_STATUS_FAILED = 5;
+}
+
+message VideoRendition {
+  string quality = 1;           // e.g. 1080p
+  string codec = 2;             // e.g. h264
+  int32 bitrate_kbps = 3;
+  string segment_path = 4;      // prefix for S3 segments
+  string manifest_path = 5;     // mpd/adaptation set location
+}
+
+message VideoSummary {
+  string video_id = 1;
+  string title = 2;
+  string description = 3;
+  string thumbnail_url = 4;
+  VideoStatus status = 5;
+  repeated string tags = 6;
+  int64 duration_seconds = 7;
+  string owner_id = 8;
+}
+
+message CreateUploadURLRequest {
+  string owner_id = 1;
+  string title = 2;
+  string description = 3;
+  repeated string tags = 4;
+  string original_filename = 5;
+  string content_type = 6;
+  int64 size_bytes = 7;
+}
+
+message UploadCredentials {
+  string url = 1;                       // Pre-signed POST endpoint
+  map<string, string> form_fields = 2;  // Form fields (policy, signature, etc.)
+  int64 expires_in_seconds = 3;
+}
+
+message CreateUploadURLResponse {
+  string upload_id = 1;
+  UploadCredentials credentials = 2;
+}
+
+message CompleteUploadRequest {
+  string upload_id = 1;
+  string s3_bucket = 2;
+  string s3_key = 3;
+  string checksum = 4;            // Optional checksum reported by the client
+  int64 size_bytes = 5;
+}
+
+message CompleteUploadResponse {
+  string video_id = 1;
+  VideoStatus status = 2;
+}
+
+message GetTranscodeStatusRequest {
+  string video_id = 1;
+}
+
+message GetTranscodeStatusResponse {
+  VideoStatus status = 1;
+  double progress_percent = 2;
+  repeated VideoRendition renditions = 3;
+  string failure_reason = 4;
+}
+
+message GetPlaybackInfoRequest {
+  string video_id = 1;
+}
+
+message GetPlaybackInfoResponse {
+  string manifest_url = 1;         // DASH MPD endpoint consumed by dash.js
+  repeated VideoRendition renditions = 2;
+  map<string, string> subtitles = 3;  // language -> URL
+}
+
+message RecommendVideosRequest {
+  string user_id = 1;
+  int32 limit = 2;
+}
+
+message RecommendVideosResponse {
+  repeated VideoSummary videos = 1;
+}
+
+message SearchVideosRequest {
+  string query = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message SearchVideosResponse {
+  repeated VideoSummary videos = 1;
+  string next_page_token = 2;
+}
+
+service VideoService {
+  rpc CreateUploadURL(CreateUploadURLRequest) returns (CreateUploadURLResponse) {
+    option (google.api.http) = {
+      post: "/v1/videos:uploadURL"
+      body: "*"
+    };
+  }
+
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse) {
+    option (google.api.http) = {
+      post: "/v1/videos:completeUpload"
+      body: "*"
+    };
+  }
+
+  rpc GetTranscodeStatus(GetTranscodeStatusRequest) returns (GetTranscodeStatusResponse) {
+    option (google.api.http) = {
+      get: "/v1/videos/{video_id}/transcodeStatus"
+    };
+  }
+
+  rpc GetPlaybackInfo(GetPlaybackInfoRequest) returns (GetPlaybackInfoResponse) {
+    option (google.api.http) = {
+      get: "/v1/videos/{video_id}/playbackInfo"
+    };
+  }
+
+  rpc RecommendVideos(RecommendVideosRequest) returns (RecommendVideosResponse) {
+    option (google.api.http) = {
+      get: "/v1/videos:recommendations"
+    };
+  }
+
+  rpc SearchVideos(SearchVideosRequest) returns (SearchVideosResponse) {
+    option (google.api.http) = {
+      get: "/v1/videos:search"
+    };
+  }
+}
